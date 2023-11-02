@@ -1,14 +1,15 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use serde_json::Value;
+use serde::{Serialize, Deserialize};
 
 use crate::jwt::JWT;
 
-#[repr(C)]
+#[derive(Serialize, Deserialize)]
 pub struct FfiResult {
     success: bool,
-    data: *const c_char,
-    error: *const c_char,
+    data: serde_json::Value,
+    error: String,
 }
 
 #[no_mangle]
@@ -24,7 +25,7 @@ pub extern "C" fn generate(secret: *const c_char, claims: *const c_char) -> *mut
 }
 
 #[no_mangle]
-pub extern "C" fn get_claims(secret: *const c_char, value: *const c_char) -> FfiResult {
+pub extern "C" fn get_claims(secret: *const c_char, value: *const c_char) -> *mut c_char {
     let secret = unsafe { CStr::from_ptr(secret).to_str().unwrap() };
     let value = unsafe { CStr::from_ptr(value).to_str().unwrap() };
     
@@ -32,19 +33,24 @@ pub extern "C" fn get_claims(secret: *const c_char, value: *const c_char) -> Ffi
 
     match jwt.get_claims::<serde_json::Value>(value) {
         Ok(claims) => {
-            let claims_json = serde_json::to_string(&claims).unwrap();
-            FfiResult {
+            let result = FfiResult {
                 success: true,
-                data: CString::new(claims_json).unwrap().into_raw(),
-                error: CString::new("").unwrap().into_raw(),
-            }
+                data: claims,
+                error: "".to_string(),
+            };
+            CString::new(
+                serde_json::to_string(&result).unwrap(),
+            ).unwrap().into_raw()
         },
         Err(error) => {
-            FfiResult { 
+            let result = FfiResult { 
                 success: false,
-                data: CString::new("").unwrap().into_raw(),
-                error: CString::new(error).unwrap().into_raw(),
-            }
+                data: serde_json::Value::Null,
+                error,
+            };
+            CString::new(
+                serde_json::to_string(&result).unwrap(),
+            ).unwrap().into_raw()
         },
     }
 }
